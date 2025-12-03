@@ -2,6 +2,7 @@ from PyQt5.QtWidgets import QWidget, QMessageBox
 from PyQt5.QtGui import QPainter, QColor, QPen, QBrush, QFont, QRadialGradient, QPolygonF
 from PyQt5.QtCore import Qt, QPoint, QRect, QPropertyAnimation, QEasingCurve, QObject, pyqtProperty, QTimer
 import random
+import math
 
 class ChessBoard(QWidget):
     def __init__(self, parent=None):
@@ -33,8 +34,17 @@ class ChessBoard(QWidget):
         self.check_timer = QTimer(self)
         self.check_timer.timeout.connect(self.update_check_effects)
         
+        # AI移动高亮相关
+        self.ai_move_path = None  # 存储AI移动路径 (from_row, from_col, to_row, to_col)
+        self.ai_highlight_timer = QTimer(self)
+        self.ai_highlight_timer.timeout.connect(self.clear_ai_highlight)
+        self.ai_highlight_timer.setSingleShot(True)
+        
         # 游戏结束回调函数
         self.game_over_callback = None
+        
+        # AI难度等级
+        self.ai_difficulty = "normal"  # simple, normal, hard, expert
         
     def init_board(self):
         """初始化棋盘和棋子"""
@@ -82,6 +92,10 @@ class ChessBoard(QWidget):
     def set_game_mode(self, mode):
         """设置游戏模式"""
         self.game_mode = mode
+    
+    def set_ai_difficulty(self, difficulty):
+        """设置AI难度等级"""
+        self.ai_difficulty = difficulty
     
     def resizeEvent(self, event):
         """重写调整大小事件，根据窗口大小动态计算行间距并保持正确比例"""
@@ -150,9 +164,99 @@ class ChessBoard(QWidget):
         # 绘制棋子
         self.draw_pieces(painter, board_x, board_y)
         
+        # 绘制AI移动高亮效果
+        self.draw_ai_move_highlight(painter, board_x, board_y)
+        
         # 绘制将军特效
         self.draw_check_effects(painter)
         
+    def clear_ai_highlight(self):
+        """清除AI移动高亮效果"""
+        self.ai_move_path = None
+        self.update()
+        
+    def draw_ai_move_highlight(self, painter, board_x, board_y):
+        """绘制AI移动路径高亮效果"""
+        if not self.ai_move_path:
+            return
+        
+        from_row, from_col, to_row, to_col = self.ai_move_path
+        
+        # 计算起始位置和目标位置的坐标
+        start_x = board_x + from_col * self.line_spacing
+        start_y = board_y + from_row * self.line_spacing
+        end_x = board_x + to_col * self.line_spacing
+        end_y = board_y + to_row * self.line_spacing
+        
+        # 获取棋子大小
+        piece_size = int(self.line_spacing * 0.8)
+        
+        # 绘制起始位置的高亮圆圈
+        painter.save()
+        painter.setBrush(QBrush(QColor(0, 255, 0, 100)))
+        painter.setPen(QPen(QColor(0, 255, 0, 200), 3))
+        painter.drawEllipse(int(start_x - piece_size // 2), int(start_y - piece_size // 2), piece_size, piece_size)
+        
+        # 绘制目标位置的高亮圆圈
+        painter.setBrush(QBrush(QColor(255, 255, 0, 100)))
+        painter.setPen(QPen(QColor(255, 255, 0, 200), 3))
+        painter.drawEllipse(int(end_x - piece_size // 2), int(end_y - piece_size // 2), piece_size, piece_size)
+        
+        # 绘制移动箭头
+        painter.setPen(QPen(QColor(255, 165, 0, 200), 3, Qt.SolidLine, Qt.RoundCap))
+        
+        # 计算箭头方向向量
+        dx = end_x - start_x
+        dy = end_y - start_y
+        
+        # 计算单位向量
+        length = (dx ** 2 + dy ** 2) ** 0.5
+        if length > 0:
+            ux = dx / length
+            uy = dy / length
+            
+            # 箭头长度（棋子大小的一半）
+            arrow_length = piece_size / 2
+            
+            # 箭头起点（从起始位置边缘开始）
+            arrow_start_x = start_x + ux * (piece_size / 2)
+            arrow_start_y = start_y + uy * (piece_size / 2)
+            
+            # 箭头终点（在目标位置边缘结束）
+            arrow_end_x = end_x - ux * (piece_size / 2)
+            arrow_end_y = end_y - uy * (piece_size / 2)
+            
+            # 绘制箭头主线
+            painter.drawLine(int(arrow_start_x), int(arrow_start_y), int(arrow_end_x), int(arrow_end_y))
+            
+            # 绘制箭头头部
+            painter.setBrush(QColor(255, 165, 0, 200))
+            painter.setPen(QPen(QColor(255, 165, 0, 200), 1))
+            
+            # 计算箭头头部的三个点
+            head_length = 15
+            head_angle = 30  # 箭头夹角（度）
+            
+            # 转换为弧度
+            angle = math.atan2(dy, dx)
+            angle1 = angle - math.radians(head_angle)
+            angle2 = angle + math.radians(head_angle)
+            
+            # 箭头头部的三个点
+            point1 = (arrow_end_x, arrow_end_y)
+            point2 = (arrow_end_x - head_length * math.cos(angle1), arrow_end_y - head_length * math.sin(angle1))
+            point3 = (arrow_end_x - head_length * math.cos(angle2), arrow_end_y - head_length * math.sin(angle2))
+            
+            # 绘制箭头头部
+            polygon = QPolygonF([
+                QPoint(int(point1[0]), int(point1[1])),
+                QPoint(int(point2[0]), int(point2[1])),
+                QPoint(int(point3[0]), int(point3[1]))
+            ])
+            painter.drawPolygon(polygon)
+        
+        painter.restore()
+    
     def draw_board_lines(self, painter, board_x, board_y):
         """绘制棋盘线条"""
         pen = QPen(QColor(0, 0, 0), 2)
@@ -934,9 +1038,40 @@ class ChessBoard(QWidget):
         
         return True
     
+    def evaluate_move_value(self, from_row, from_col, to_row, to_col):
+        """评估移动的价值"""
+        # 棋子价值表
+        piece_values = {
+            "将": 1000, "帥": 1000,
+            "車": 100, "馬": 50, "象": 20, "士": 20, "炮": 50, "兵": 10
+        }
+        
+        value = 0
+        
+        # 检查是否能吃子
+        target_piece = self.board[to_row][to_col]
+        if target_piece:
+            # 吃子加分
+            value += piece_values.get(target_piece["name"], 10)
+        
+        # 检查是否将军
+        # 模拟移动
+        temp_piece = self.board[to_row][to_col]
+        self.board[to_row][to_col] = self.board[from_row][from_col]
+        self.board[from_row][from_col] = None
+        
+        # 检查是否将军
+        if self.is_checked("red"):
+            value += 50
+        
+        # 恢复棋盘
+        self.board[from_row][from_col] = self.board[to_row][to_col]
+        self.board[to_row][to_col] = temp_piece
+        
+        return value
+    
     def ai_move(self):
-        """AI移动（简单实现）"""
-        # 简单的AI实现：随机选择一个可移动的棋子并移动
+        """AI移动（支持不同难度等级）"""
         import random
         
         # 收集所有可移动的棋子
@@ -949,14 +1084,82 @@ class ChessBoard(QWidget):
                     for to_row in range(len(self.board)):
                         for to_col in range(len(self.board[to_row])):
                             if self.can_move(row, col, to_row, to_col):
-                                movable_pieces.append((row, col, to_row, to_col))
+                                value = self.evaluate_move_value(row, col, to_row, to_col)
+                                movable_pieces.append((row, col, to_row, to_col, value))
         
         if movable_pieces:
-            # 随机选择一个移动
-            from_row, from_col, to_row, to_col = random.choice(movable_pieces)
+            chosen_move = None
+            
+            if self.ai_difficulty == "simple":
+                # 简单：完全随机移动
+                chosen_move = random.choice(movable_pieces)
+            
+            elif self.ai_difficulty == "normal":
+                # 正常：优先选择吃子或将军的移动
+                good_moves = [move for move in movable_pieces if move[4] > 10]
+                if good_moves:
+                    chosen_move = random.choice(good_moves)
+                else:
+                    chosen_move = random.choice(movable_pieces)
+            
+            elif self.ai_difficulty == "hard":
+                # 困难：选择价值最高的移动
+                chosen_move = max(movable_pieces, key=lambda x: x[4])
+            
+            elif self.ai_difficulty == "expert":
+                # 极难：考虑多步走法
+                # 这里我们用简单的两步预测实现
+                best_value = -1000000
+                best_move = None
+                
+                for move1 in movable_pieces:
+                    # 模拟第一步移动
+                    from_row1, from_col1, to_row1, to_col1, value1 = move1
+                    temp_piece1 = self.board[to_row1][to_col1]
+                    self.board[to_row1][to_col1] = self.board[from_row1][from_col1]
+                    self.board[from_row1][from_col1] = None
+                    
+                    # 模拟玩家可能的反击
+                    player_moves = []
+                    for row in range(len(self.board)):
+                        for col in range(len(self.board[row])):
+                            piece = self.board[row][col]
+                            if piece and piece["color"] == "red":
+                                for to_row in range(len(self.board)):
+                                    for to_col in range(len(self.board[to_row])):
+                                        if self.can_move(row, col, to_row, to_col):
+                                            value = self.evaluate_move_value(row, col, to_row, to_col)
+                                            player_moves.append((row, col, to_row, to_col, value))
+                    
+                    # 计算对手的最佳反击
+                    if player_moves:
+                        opponent_best = max(player_moves, key=lambda x: x[4])
+                        total_value = value1 - opponent_best[4]
+                    else:
+                        total_value = value1
+                    
+                    # 恢复棋盘
+                    self.board[from_row1][from_col1] = self.board[to_row1][to_col1]
+                    self.board[to_row1][to_col1] = temp_piece1
+                    
+                    # 更新最佳移动
+                    if total_value > best_value:
+                        best_value = total_value
+                        best_move = move1
+                
+                chosen_move = best_move if best_move else max(movable_pieces, key=lambda x: x[4])
+            
+            # 执行选择的移动
+            from_row, from_col, to_row, to_col, _ = chosen_move
+            
+            # 记录AI移动路径用于高亮显示
+            self.ai_move_path = (from_row, from_col, to_row, to_col)
             
             # 执行移动
             self.move_piece(from_row, from_col, to_row, to_col)
+            
+            # 开始高亮显示AI移动路径
+            self.ai_highlight_timer.start(1000)  # 高亮显示1秒
             
             # 检查游戏是否结束
             if self.is_game_over():

@@ -1,5 +1,5 @@
 import sys
-from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QMessageBox, QMenuBar, QMenu, QDialog
+from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QMessageBox, QMenuBar, QMenu, QDialog, QComboBox, QDialogButtonBox
 from PyQt5.QtCore import Qt, QPropertyAnimation, QEasingCurve
 from PyQt5.QtGui import QFont, QPalette, QColor, QPixmap, QBrush
 from chess_board import ChessBoard
@@ -68,7 +68,6 @@ class VictoryDialog(QDialog):
             }
             QPushButton:hover {
                 background-color: #FFC107;
-                transform: scale(1.05);
             }
             QPushButton:pressed {
                 background-color: #FFA000;
@@ -158,10 +157,228 @@ class ChineseChessGame(QMainWindow):
         self.current_turn_label.setStyleSheet("QLabel { font-weight: bold; color: red; }")
         
     def ai_game(self):
-        """切换到人机对战模式"""
-        self.chess_board.set_game_mode("ai")
-        self.new_game()
-        QMessageBox.information(self, "提示", "已切换到人机对战模式")
+        """切换到人机对战模式并选择难度"""
+        # 创建难度选择对话框
+        dialog = QDialog(self)
+        dialog.setWindowTitle("选择AI难度")
+        dialog.setFixedSize(500, 450)  # 按比例缩小对话框尺寸
+        
+        # 设置对话框样式
+        dialog.setStyleSheet(""".QDialog {
+            background-color: #f0f0f0;
+            border-radius: 15px;
+        }
+        
+        QLabel {
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+            padding: 12px;
+        }
+        
+        QComboBox {
+            font-size: 16px;
+            padding: 12px;
+            margin: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            background-color: white;
+        }
+        
+        QComboBox:hover {
+            border-color: #aaa;
+        }
+        
+        QComboBox:focus {
+            border-color: #4CAF50;
+            outline: none;
+        }
+        
+        QPushButton {
+            font-size: 20px;
+            padding: 15px 30px;
+            border-radius: 10px;
+            margin: 15px;
+            border: none;
+        }
+        
+        QPushButton#okButton {
+            background-color: #4CAF50;
+            color: white;
+            min-width: 100px;
+            max-width: 100px;
+            min-height: 40px;
+            max-height: 40px;
+            font-size: 16px;
+            padding: 8px;
+        }
+        
+        QPushButton#okButton:hover {
+            background-color: #45a049;
+        }
+        
+        QPushButton#cancelButton {
+            background-color: #f44336;
+            color: white;
+            min-width: 100px;
+            max-width: 100px;
+            min-height: 40px;
+            max-height: 40px;
+            font-size: 16px;
+            padding: 8px;
+        }
+        
+        QPushButton#cancelButton:hover {
+            background-color: #d32f2f;
+        }""")
+        
+        layout = QVBoxLayout(dialog)
+        
+        # 添加标题标签
+        title_label = QLabel("<center>选择AI难度等级</center>", dialog)
+        title_label.setStyleSheet("QLabel { font-size: 18px; font-weight: bold; color: #4CAF50; padding: 15px; }")
+        layout.addWidget(title_label)
+        
+        # 创建难度选择下拉框
+        difficulty_combo = QComboBox(dialog)
+        difficulty_combo.setFixedSize(300, 75)  # 增加下拉框高度
+        difficulty_combo.setFont(QFont("SimHei", 14))  # 按比例缩小字体
+        
+        # 添加带有描述的难度等级
+        difficulty_combo.addItem("简单 - 适合初学者")
+        difficulty_combo.addItem("正常 - 平衡难度")
+        difficulty_combo.addItem("困难 - 挑战策略")
+        difficulty_combo.addItem("极难 - 高手对决")
+        
+        difficulty_combo.setCurrentIndex(1)  # 默认选择"正常"
+        layout.addWidget(difficulty_combo, alignment=Qt.AlignCenter)
+        layout.addSpacing(10)  # 增加间距
+        
+        # 添加难度说明
+        self.difficulty_desc_label = QLabel("", dialog)
+        self.difficulty_desc_label.setWordWrap(True)
+        self.difficulty_desc_label.setMinimumHeight(100)  # 按比例缩小高度
+        self.difficulty_desc_label.setFont(QFont("SimHei", 14))  # 按比例缩小字体
+        self.difficulty_desc_label.setStyleSheet("QLabel { font-size: 14px; color: #333; padding: 15px; margin: 15px; background-color: #fff; border-radius: 10px; border: 2px solid #ddd; line-height: 1.5; }")
+        layout.addWidget(self.difficulty_desc_label)
+        
+        # 创建按钮
+        ok_button = QPushButton("确定", dialog)
+        cancel_button = QPushButton("取消", dialog)
+        
+        # 设置按钮对象名，确保样式正确应用
+        ok_button.setObjectName("okButton")
+        cancel_button.setObjectName("cancelButton")
+        
+        # 设置按钮大小
+        ok_button.setFixedSize(100, 40)
+        cancel_button.setFixedSize(100, 40)
+        
+        # 创建按钮布局
+        button_layout = QHBoxLayout()
+        button_layout.addWidget(ok_button)
+        button_layout.addSpacing(30)  # 按比例缩小按钮间距
+        button_layout.addWidget(cancel_button)
+        
+        layout.addLayout(button_layout)
+        layout.addSpacing(30)
+        
+        # 连接信号
+        ok_button.clicked.connect(dialog.accept)
+        cancel_button.clicked.connect(dialog.reject)
+        difficulty_combo.currentIndexChanged.connect(self.update_difficulty_description)
+        
+        # 初始化难度描述
+        self.update_difficulty_description(1)
+        
+        # 显示对话框
+        if dialog.exec_() == QDialog.Accepted:
+            difficulty_map = {
+                0: "simple",
+                1: "normal",
+                2: "hard",
+                3: "expert"
+            }
+            selected_difficulty = difficulty_map[difficulty_combo.currentIndex()]
+            difficulty_text = difficulty_combo.currentText().split(" - ")[0]
+            
+            # 设置游戏模式和AI难度
+            self.chess_board.set_game_mode("ai")
+            self.chess_board.set_ai_difficulty(selected_difficulty)
+            self.new_game()
+            
+            # 创建更美观的提示信息
+            msg_box = QMessageBox(self)
+            msg_box.setWindowTitle("模式切换成功")
+            msg_box.setText(f"已切换到人机对战模式")
+            msg_box.setInformativeText(f"AI难度：{difficulty_text}")
+            msg_box.setIcon(QMessageBox.Information)
+            
+            # 优化提示框样式
+            msg_box.setStyleSheet("""
+            QMessageBox {
+                background-color: #f8f9fa;
+                border-radius: 12px;
+                border: 2px solid #e9ecef;
+                padding: 20px;
+                min-width: 350px;
+            }
+            
+            QMessageBox::title {
+                color: #495057;
+                font-size: 18px;
+                font-weight: bold;
+                padding: 0 0 10px 0;
+                text-align: center;
+            }
+            
+            QMessageBox QLabel {
+                color: #212529;
+                font-size: 16px;
+                padding: 8px;
+                text-align: center;
+                margin: 0 auto;
+            }
+            
+            QMessageBox QPushButton {
+                background-color: #007bff;
+                color: white;
+                border-radius: 6px;
+                padding: 8px 24px;
+                font-size: 14px;
+                border: none;
+                min-width: 100px;
+                min-height: 36px;
+                margin: 10px auto;
+            }
+            
+            QMessageBox QPushButton:hover {
+                background-color: #0056b3;
+            }
+            
+            QMessageBox QPushButton:pressed {
+                background-color: #004085;
+            }
+            
+            QMessageBox QGridLayout {
+                alignment: Qt.AlignCenter;
+            }
+            
+            QMessageBox QHBoxLayout {
+                alignment: Qt.AlignCenter;
+            }
+            """)
+            msg_box.exec_()
+    
+    def update_difficulty_description(self, index):
+        """更新难度等级描述"""
+        descriptions = {
+            0: "简单难度：AI完全随机移动棋子，适合刚接触中国象棋的初学者熟悉规则。",
+            1: "正常难度：AI会优先选择吃子或将军的移动，平衡了挑战性和可玩性。",
+            2: "困难难度：AI会选择价值最高的移动，考虑吃子和将军策略，适合有一定基础的玩家。",
+            3: "极难难度：AI会考虑多步走法，预测对手的反击，是对高手的终极挑战。"
+        }
+        self.difficulty_desc_label.setText(descriptions.get(index, ""))
         
     def network_game(self):
         """切换到联机对战模式"""
