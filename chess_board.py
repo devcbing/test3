@@ -25,6 +25,14 @@ class ChessBoard(QWidget):
         self.celebration_timer.timeout.connect(self.update_celebration)
         self.celebration_timer.start(30)
         
+        # 将军提示特效相关
+        self.check_effects = False  # 是否显示将军特效
+        self.check_text = ""  # 将军提示文字
+        self.check_alpha = 255  # 透明度
+        self.check_pulse = 0  # 脉冲动画参数
+        self.check_timer = QTimer(self)
+        self.check_timer.timeout.connect(self.update_check_effects)
+        
         # 游戏结束回调函数
         self.game_over_callback = None
         
@@ -141,6 +149,9 @@ class ChessBoard(QWidget):
         
         # 绘制棋子
         self.draw_pieces(painter, board_x, board_y)
+        
+        # 绘制将军特效
+        self.draw_check_effects(painter)
         
     def draw_board_lines(self, painter, board_x, board_y):
         """绘制棋盘线条"""
@@ -740,6 +751,11 @@ class ChessBoard(QWidget):
         self.board[to_row][to_col] = self.board[from_row][from_col]
         self.board[from_row][from_col] = None
         
+        # 检查对方是否被将军
+        enemy_color = "black" if self.current_player == "red" else "red"
+        if self.is_checked(enemy_color):
+            self.show_check_effect(enemy_color)
+        
         # 如果是局域网对战，发送移动数据
         if self.game_mode == "network" and self.is_connected:
             self.send_move(from_row, from_col, to_row, to_col)
@@ -758,6 +774,10 @@ class ChessBoard(QWidget):
             # 根据当前玩家设置字体颜色
             color = "red" if self.current_player == "red" else "black"
             main_window.current_turn_label.setStyleSheet(f"QLabel {{ font-weight: bold; color: {color}; }}")
+        
+        # 检查当前玩家是否被将军
+        if self.is_checked(self.current_player):
+            self.show_check_effect(self.current_player)
     
     def get_player_name(self):
         """获取当前玩家名称"""
@@ -779,6 +799,111 @@ class ChessBoard(QWidget):
                         black_jiang = True
         
         return not red_jiang or not black_jiang
+    
+    def is_checked(self, color):
+        """检查指定颜色的玩家是否被将军"""
+        # 找到当前颜色的将/帅
+        jiang_pos = None
+        for row in range(len(self.board)):
+            for col in range(len(self.board[row])):
+                piece = self.board[row][col]
+                if piece and (piece["name"] == "将" or piece["name"] == "帅") and piece["color"] == color:
+                    jiang_pos = (row, col)
+                    break
+            if jiang_pos:
+                break
+        
+        if not jiang_pos:
+            return False
+        
+        # 检查对方是否有棋子可以攻击到将/帅
+        enemy_color = "black" if color == "red" else "red"
+        for row in range(len(self.board)):
+            for col in range(len(self.board[row])):
+                piece = self.board[row][col]
+                if piece and piece["color"] == enemy_color:
+                    if self.can_move(row, col, jiang_pos[0], jiang_pos[1]):
+                        return True
+        
+        return False
+    
+    def show_check_effect(self, color):
+        """显示将军特效"""
+        self.check_effects = True
+        self.check_text = "红方被将军！" if color == "red" else "黑方被将军！"
+        self.check_alpha = 255
+        self.check_pulse = 0
+        if not self.check_timer.isActive():
+            self.check_timer.start(50)  # 每50毫秒更新一次
+    
+    def update_check_effects(self):
+        """更新将军特效"""
+        # 更新脉冲动画（加快爆炸速度）
+        self.check_pulse += 0.2
+        if self.check_pulse > 1:
+            self.check_pulse = 1
+        
+        # 快速降低透明度
+        if self.check_alpha > 0:
+            self.check_alpha -= 8  # 加快消失速度
+            if self.check_alpha < 0:
+                self.check_alpha = 0
+        else:
+            self.check_effects = False
+            self.check_timer.stop()
+        
+        self.update()
+    
+    def draw_check_effects(self, painter):
+        """绘制将军特效（爆炸弹出效果）"""
+        if not self.check_effects:
+            return
+        
+        # 设置透明度
+        painter.save()
+        
+        # 计算棋盘实际绘制区域
+        board_width = (self.board_size - 1) * self.line_spacing
+        board_height = (self.row_count - 1) * self.line_spacing
+        board_x = (self.width() - board_width) // 2
+        board_y = (self.height() - board_height) // 2
+        
+        # 计算棋盘中心位置
+        center_x = board_x + board_width // 2
+        center_y = board_y + board_height // 2
+        
+        # 绘制爆炸动画效果（向外扩散的圆形）
+        explosion_radius = int(self.line_spacing * 2 * (0.5 + self.check_pulse * 0.5))  # 最大半径为两个格子
+        explosion_color = QColor(255, 0, 0, int(self.check_alpha * 0.5))
+        painter.setBrush(QBrush(explosion_color))
+        painter.setPen(QPen(QColor(255, 0, 0, self.check_alpha), 2))
+        painter.drawEllipse(int(center_x - explosion_radius), int(center_y - explosion_radius), 
+                          int(explosion_radius * 2), int(explosion_radius * 2))
+        
+        # 绘制将军文字（爆炸弹出效果）
+        font_size = 36 + int(12 * self.check_pulse)  # 文字大小随爆炸变化
+        font = QFont("SimHei", font_size, QFont.Bold)
+        painter.setFont(font)
+        
+        # 设置文字颜色和透明度
+        text_color = QColor(255, 0, 0, self.check_alpha)
+        painter.setPen(QPen(text_color, 2))
+        
+        # 计算文字位置（居中）
+        text_rect = painter.fontMetrics().boundingRect(self.check_text)
+        x = center_x - text_rect.width() // 2
+        y = center_y + text_rect.height() // 2
+        
+        # 添加文字阴影效果
+        shadow_color = QColor(0, 0, 0, int(self.check_alpha * 0.3))
+        painter.setPen(QPen(shadow_color, 2))
+        painter.drawText(int(x + 2), int(y + 2), self.check_text)
+        
+        # 绘制主文字
+        painter.setPen(QPen(text_color, 2))
+        painter.drawText(int(x), int(y), self.check_text)
+        
+        painter.restore()
     
     def get_winner(self):
         """获取获胜者"""
