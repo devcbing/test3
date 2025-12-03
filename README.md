@@ -25,6 +25,7 @@ test3/
 ### 特效效果
 - **吃棋爆炸特效**：吃掉对方棋子时显示爆炸效果
 - **获胜庆祝特效**：游戏结束时显示"完结撒花"效果
+- **将军提示特效**：出现将军情况时，在棋盘中间以爆炸方式弹出提示文字
 - **精美获胜弹窗**：自定义的游戏结束弹窗，带有动画效果
 
 ## 安装和运行
@@ -76,7 +77,12 @@ python main.py
    - 粒子带有重力和旋转效果
    - 渐隐动画效果
 
-3. **自定义弹窗**
+3. **将军提示特效**
+   - 棋盘中间爆炸弹出提示
+   - 快速消失不影响继续走棋
+   - 动态脉冲和大小变化效果
+
+4. **自定义弹窗**
    - 圆角设计和金色边框
    - 动画效果
    - 友好的交互体验
@@ -112,6 +118,7 @@ python main.py
 - `can_move()`: 检查棋子是否可以移动到目标位置
 - `move_piece()`: 移动棋子并处理吃子逻辑
 - `check_game_over()`: 检查游戏是否结束
+- `is_checked()`: 检查是否有玩家被将军
 
 **特效相关方法**：
 - `create_explosion()`: 创建爆炸特效
@@ -120,6 +127,9 @@ python main.py
 - `start_celebration()`: 开始庆祝特效
 - `update_celebration()`: 更新庆祝特效状态
 - `draw_celebration()`: 绘制庆祝特效
+- `show_check_effect()`: 显示将军提示特效
+- `update_check_effects()`: 更新将军特效状态
+- `draw_check_effects()`: 绘制将军特效
 
 #### VictoryDialog 类 (main.py)
 
@@ -196,6 +206,33 @@ self.update_celebration()
 # 绘制庆祝特效
 self.draw_celebration(painter)
 ```
+
+### 将军提示特效
+
+**实现原理**：
+- 在棋盘中间位置创建爆炸弹出效果
+- 提示文字随爆炸动态变化大小
+- 快速消失不影响继续走棋
+- 使用QTimer实现50ms间隔的动画更新
+
+**核心代码**：
+```python
+# 检查是否被将军
+if self.is_checked(enemy_color):
+    self.show_check_effect(enemy_color)
+
+# 更新将军特效
+self.update_check_effects()
+
+# 绘制将军特效
+self.draw_check_effects(painter)
+```
+
+**特效特点**：
+- 爆炸半径限制在棋盘范围内
+- 文字居中显示在棋盘中央
+- 透明度快速降低实现快速消失
+- 脉冲动画增强视觉冲击力
 
 ### 自定义弹窗
 
