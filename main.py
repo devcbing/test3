@@ -146,6 +146,8 @@ class ChineseChessGame(QMainWindow):
         
         # 创建棋盘部件
         self.chess_board = ChessBoard(self)  # 设置父窗口为self
+        # 设置游戏结束回调
+        self.chess_board.game_over_callback = self.show_victory_dialog
         main_layout.addWidget(self.chess_board, 1)  # 设置拉伸因子为1，让棋盘填充剩余空间
         
     def new_game(self):
@@ -200,6 +202,11 @@ class ChineseChessGame(QMainWindow):
         dialog = VictoryDialog(winner, self)
         dialog.exec_()
         self.new_game()
+        
+    def show_victory_dialog(self, winner):
+        """显示获胜弹窗"""
+        dialog = VictoryDialog(winner, self)
+        dialog.exec_()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
